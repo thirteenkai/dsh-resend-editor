@@ -158,6 +158,13 @@ window.__ModuleLoader__.load({
 .der-mention button[data-active="true"],.der-mention button:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l1)}
 .der-mention img{width:24px;height:24px;border-radius:5px;object-fit:cover}
 .der-menuthumb{width:20px;height:20px;border-radius:4px;object-fit:cover;display:block}
+.der-atpop{position:fixed;z-index:2147483000;min-width:200px;max-width:320px;max-height:280px;overflow-y:auto;box-sizing:border-box;padding:6px;border-radius:12px;background:var(--dsw-specific-input-major,#2b2b2f);border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.25));box-shadow:0 8px 24px rgba(0,0,0,.28);display:flex;flex-direction:column;gap:2px}
+.der-atpop[hidden]{display:none}
+.der-atpop-title{padding:4px 8px 2px;color:var(--dsw-alias-label-tertiary);font-size:12px}
+.der-atpop button{display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;text-align:left;cursor:pointer}
+.der-atpop button[data-active="true"],.der-atpop button:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.der-atpop img{width:24px;height:24px;border-radius:5px;object-fit:cover;flex:none}
+.der-atpop small{margin-left:auto;padding-left:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:12px}
 .der-origin{display:inline-flex;align-items:center;gap:3px;width:auto!important;padding:0 6px!important;font-size:12px;white-space:nowrap}
 `
 
@@ -1068,6 +1075,183 @@ window.__ModuleLoader__.load({
       return cleanup
     }
 
+    // ---------- 紧跟文字的 @ ----------
+    // 官方 @ 只认行首或空白后的 @，中文里「奶奶@」不会弹菜单。这种情况由本插件补一个只列图片的小菜单，
+    // 选中后同样插入官方引用 chip（编号、标红、发送时写成【图N】都和官方菜单一致）。
+    // @ 后面只允许空、数字或「图N」，免得打邮箱地址时误弹。
+    const INLINE_QUERY = /^(图|image)?\d*$/i
+
+    function inlineMentionAt(shell) {
+      const p = shell.projection
+      if (!p || typeof p.detectText !== 'string' || typeof p.caret !== 'number') return null
+      if (p.selection && p.selection.start !== p.selection.end) return null
+      const text = p.detectText
+      const caret = p.caret
+      let i = caret - 1
+      while (i >= 0 && caret - i <= 12 && text[i] !== '@' && !/\s/.test(text[i])) i--
+      if (i <= 0 || text[i] !== '@' || /\s/.test(text[i - 1])) return null
+      const query = text.slice(i + 1, caret)
+      return INLINE_QUERY.test(query) ? { start: i, query, prefix: text.slice(0, i + 1) } : null
+    }
+
+    function installInlineMention(ctx) {
+      const key = '__' + PLUGIN + ':inline-mention'
+      if (window[key]) window[key]()
+      const pop = document.createElement('div')
+      pop.className = 'der-atpop'
+      pop.setAttribute('role', 'listbox')
+      pop.hidden = true
+      document.body.appendChild(pop)
+      let state = null
+      // 按 Esc 关掉的那个 @（以「@ 及其之前的文字」识别）：继续在它后面打字时不再弹
+      let dismissed = null
+      let frame = 0
+
+      const shellOf = (sessionId) => {
+        try {
+          return ctx.get('conversation').input.shell(sessionId)
+        } catch (e) {
+          return null
+        }
+      }
+      const close = () => {
+        state = null
+        pop.hidden = true
+      }
+      const pick = (index) => {
+        const current = state
+        close()
+        const im = current && current.items[index]
+        const shell = im && shellOf(current.sessionId)
+        if (!shell || typeof shell.insertReference !== 'function') return
+        const caret = shell.actions.captureInsertion()
+        const ok = shell.insertReference(
+          { source: MENTION_SOURCE, ref: mentionRef(current.sessionId, im.id), label: fmt(T.tag, im.n), clipboardText: fmt(T.token, im.n) },
+          { start: current.start, end: caret.end, draftRev: caret.draftRev }
+        )
+        if (!ok) log.warn('inline @ image insert refused')
+      }
+      const render = () => {
+        pop.textContent = ''
+        const title = document.createElement('div')
+        title.className = 'der-atpop-title'
+        title.textContent = T.images
+        pop.appendChild(title)
+        state.items.forEach((im, index) => {
+          const row = document.createElement('button')
+          row.type = 'button'
+          row.setAttribute('role', 'option')
+          if (index === state.active) row.setAttribute('data-active', 'true')
+          if (im.url) {
+            const img = document.createElement('img')
+            img.src = im.url
+            img.alt = ''
+            row.appendChild(img)
+          }
+          const label = document.createElement('span')
+          label.textContent = fmt(T.tag, im.n)
+          row.appendChild(label)
+          if (im.name) {
+            const name = document.createElement('small')
+            name.textContent = im.name
+            row.appendChild(name)
+          }
+          // mousedown 里选：不让输入框失焦
+          row.addEventListener('mousedown', (e) => {
+            e.preventDefault()
+            pick(index)
+          })
+          pop.appendChild(row)
+        })
+      }
+      const place = (editor) => {
+        let rect = null
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount) {
+          const r = sel.getRangeAt(0).getBoundingClientRect()
+          if (r && (r.left || r.top)) rect = r
+        }
+        if (!rect) rect = editor.getBoundingClientRect()
+        pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - pop.offsetWidth - 8)) + 'px'
+        pop.style.top = Math.max(8, rect.top - pop.offsetHeight - 8) + 'px'
+      }
+      const check = () => {
+        frame = 0
+        const editor = document.activeElement
+        if (!editor || !editor.isContentEditable || !editor.closest('[data-composer-card]') || editor.hasAttribute('data-composer-composing')) return close()
+        let ref = null
+        try {
+          ref = ctx.uiWorkspace.mainReference
+        } catch (e) {
+          return close()
+        }
+        const sessionId = ref && ref.sessionId
+        const shell = sessionId && shellOf(sessionId)
+        const hit = shell ? inlineMentionAt(shell) : null
+        if (!hit) {
+          dismissed = null
+          return close()
+        }
+        if (hit.prefix === dismissed) return close()
+        const q = hit.query.replace(/^(图|image)/i, '')
+        const items = draftImages(ctx, sessionId).filter((im) => !q || String(im.n).startsWith(q))
+        if (!items.length) return close()
+        trackDraft(ctx, sessionId)
+        const active = state && state.start === hit.start ? Math.min(state.active, items.length - 1) : 0
+        state = { sessionId, start: hit.start, prefix: hit.prefix, items, active }
+        render()
+        pop.hidden = false
+        place(editor)
+      }
+      const schedule = () => {
+        if (!frame) frame = setTimeout(check, 16)
+      }
+      // 菜单开着时接管上下、回车、Tab、Esc：捕获阶段先于编辑器，回车不会把消息发出去
+      const onKey = (e) => {
+        if (e.isComposing) return
+        // 打字快时最近一次输入的检查还没跑（菜单可能还没弹出、筛选也没更新）：先同步刷新，
+        // 否则回车会直接把消息发出去，或选中筛选前的第一项
+        if (frame) {
+          clearTimeout(frame)
+          check()
+        }
+        if (!state || pop.hidden) return
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          state.active = (state.active + (e.key === 'ArrowDown' ? 1 : -1) + state.items.length) % state.items.length
+          render()
+        } else if ((e.key === 'Enter' || e.key === 'Tab') && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) {
+          pick(state.active)
+        } else if (e.key === 'Escape') {
+          dismissed = state.prefix
+          close()
+        } else return
+        e.preventDefault()
+        e.stopPropagation()
+        e.stopImmediatePropagation()
+      }
+      const onBlur = () => setTimeout(() => {
+        if (!document.activeElement || !document.activeElement.isContentEditable) close()
+      }, 0)
+
+      const listeners = [
+        [document, 'input', schedule, true],
+        [document, 'selectionchange', schedule, false],
+        [document, 'compositionend', schedule, true],
+        [document, 'keydown', onKey, true],
+        [document, 'focusout', onBlur, true],
+        [window, 'resize', schedule, false]
+      ]
+      for (const [target, type, fn, capture] of listeners) target.addEventListener(type, fn, capture)
+      const cleanup = () => {
+        for (const [target, type, fn, capture] of listeners) target.removeEventListener(type, fn, capture)
+        clearTimeout(frame)
+        pop.remove()
+        if (window[key] === cleanup) window[key] = null
+      }
+      window[key] = cleanup
+      return cleanup
+    }
+
     function registerImageSource(ctx, triggers) {
       const source = {
         trigger: '@',
@@ -1702,6 +1886,7 @@ window.__ModuleLoader__.load({
         effect(installComposerReorder)
         effect(installImageActions)
         effect(installImageMention)
+        effect(installInlineMention)
         const Node = makeNode(ctx, 'user')
         try {
           ctx.slots.inject(NODE_SLOT, () =>

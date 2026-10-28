@@ -24,7 +24,7 @@
 - 输入框里的图片左下角有序号，和标签对应；`@2`、`@图2` 或文件名都能筛选。
 - 拖动调整附件顺序后，标签编号跟着变；引用的图被删掉，标签标红，发送时拦下。
 - 发给模型的文字里，标签写成【图2】，和图片的发送顺序一致。
-- 官方的 `@` 只在行首或空格后触发，紧跟在文字后面（如 `奶奶@`）不会弹出菜单，前面加个空格即可。编辑卡里没有这个限制。
+- 中文里 `@` 紧跟在文字后面（如 `奶奶@`）也能用：官方菜单只认行首或空格后的 `@`，这种情况由插件弹一个只列图片的小菜单，`↑↓` 选择、回车或 Tab 插入、Esc 关闭。为免打邮箱时误弹，`@` 后面只认空、数字或「图N」。
 
 ## 图片复制、下载、拖进输入框
 
@@ -103,7 +103,7 @@ A DeepSeek Harness plugin that lets you edit a message you already sent — chan
 - Later messages: forks a new session after the previous turn and sends the edited message there.
 - First message: opens a new session in the same workspace and sends it there.
 - The original session is archived, not deleted. The resent message shows "↩ Original", which restores and opens it. Workspace files are not touched.
-- Type `@` in the input box to reference a pending image: it inserts an `@Image 2` tag that is sent as `[Image 2]`, renumbers when you reorder, and turns red (blocking the send) if that image is removed. The official `@` only triggers at line start or after a space.
+- Type `@` in the input box to reference a pending image: it inserts an `@Image 2` tag that is sent as `[Image 2]`, renumbers when you reorder, and turns red (blocking the send) if that image is removed. An `@` typed right after text (e.g. Chinese without a space) opens a plugin menu that lists only images.
 - Images in the conversation (yours, ones DeepSeek generates in replies, tool results) get Copy / Download on hover and in the full-size preview, and can be dragged into the input box as attachments.
 - Pending attachments in the official input box can be dragged to reorder; they are sent in the new order.
 - Copying a message with images copies the whole message: pasting into a DSH composer or the edit card restores the images as attachments in order; rich-text editors receive text and inline images.
