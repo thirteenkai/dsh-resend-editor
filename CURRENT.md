@@ -9,9 +9,15 @@
 - 已在隔离测试环境（DSH 0.2.1-rc.3 web profile + 假模型）验证：普通消息 fork 重发、第一条开新会话、10 图长文本、超 20 张拦截、拖入文件不泄漏到官方输入框、中英文切换、从打包文件全新安装。
 - 本机 desktop profile 以 link 方式安装；`cordis.patch.yml` 末尾 `id: recall disabled: true` 停用 dsh-recall-plugin（未卸载，改前有 `.bak-*` 备份）。
 
+## 发布
+
+- GitHub 公开仓库 https://github.com/thirteenkai/dsh-resend-editor （2026-10-28 创建；提交作者用 noreply 邮箱，本仓库 git config 已设）。本环境 SSH 密钥不可用，推送用 `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`。
+- npm `dsh-resend-editor@0.1.1` 已发布（账号 kaypeng，发布需 2FA，由本人在终端执行 `npm publish`）。已在全新 DSH_HOME 用 `dsh plugin add dsh-resend-editor` 验证安装与编辑重发。
+- 以后发版：改 `package.json` version → 提交推送 → 本人 `npm publish`。
+
 ## 待办
 
-- 公开发布：GitHub 公开仓库 `thirteenkai/dsh-resend-editor` + npm 包 `dsh-resend-editor`。发布前需要：npm 登录（本人执行 `npm login`）；推送前用 GitHub noreply 邮箱重建提交，避免公开个人邮箱。
+- 收录到 awesome-dsh-plugin：仓库需创建满 1 天（2026-10-29 11:24 北京时间后）再提 PR，新增 `data/plugins/thirteenkai__dsh-resend-editor.yml`，category `session`。列表里已有多个编辑重发类插件（limbo947/dsh-recall-plugin、xt765/dsh-message-edit、sh1robana/dsh-plugin-message-edit 等），描述要写清差异：附件删除/拖动排序、发送前 imageLimits 校验、第一条消息可编辑。
 
 ## 关键实现判断
 
