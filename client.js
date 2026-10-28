@@ -2,7 +2,7 @@
 // 编辑卡里可以改文字、删图片、拖动调整顺序、补图，发送后：
 //   - 非第一条：从上一轮结束处 fork 出新会话，再把改后的内容发出去；
 //   - 第一条：前面没有可切的轮次，直接在同一工作区开新会话发出去。
-// 原会话默认归档（可在归档里找回），编辑后的消息上有「原对话」入口。消息气泡本身仍由官方组件渲染，本插件只包一层。
+// 原会话原样保留（不归档），编辑后的消息上有「原对话」入口。消息气泡本身仍由官方组件渲染，本插件只包一层。
 // 另外：复制带图片的消息、输入框附件拖动排序、@ 引用待发图片、对话里的图片可复制／下载／拖进输入框。
 // 文档级监听都在 apply 里经 ctx.effect 注册，停用或热重载时撤掉。
 window.__ModuleLoader__.load({
@@ -23,8 +23,8 @@ window.__ModuleLoader__.load({
           remove: '移除',
           dragHint: '拖动调整顺序',
           placeholder: '输入消息',
-          footFork: '将从上一轮之后开新会话发送，原会话归档',
-          footFirst: '第一条消息：将在同一工作区开新会话发送，原会话归档',
+          footFork: '将从上一轮之后 fork 出新会话发送，原会话保留不动',
+          footFirst: '第一条消息：将在同一工作区开新会话发送，原会话保留不动',
           keys: '⌘↵ 发送 · Esc 取消',
           errEmpty: '内容为空',
           errRead: '读取原附件失败：',
@@ -46,12 +46,14 @@ window.__ModuleLoader__.load({
           imgDrag: '拖到输入框可作为附件',
           tag: '图{n}',
           token: '【图{n}】',
+          tokenName: '【{name}】',
+          tokenDup: '【图{n} {name}】',
           tokenGone: '【图?】',
           errRefGone: '有引用的图片已被移除，请删掉标红的引用后再发送',
           errTokenGone: '文字里有已删除图片的引用【图?】，请改掉后再发送',
           mentionHint: '@ 引用图片',
           origin: '原对话',
-          originTitle: '打开编辑前的原对话（会从归档中恢复）'
+          originTitle: '打开编辑前的原对话'
         },
       en: {
           edit: 'Edit and resend',
@@ -62,8 +64,8 @@ window.__ModuleLoader__.load({
           remove: 'Remove',
           dragHint: 'Drag to reorder',
           placeholder: 'Message',
-          footFork: 'Sends in a new session forked after the previous turn; the original is archived',
-          footFirst: 'First message: sends in a new session in the same workspace; the original is archived',
+          footFork: 'Sends in a new session forked after the previous turn; the original stays as is',
+          footFirst: 'First message: sends in a new session in the same workspace; the original stays as is',
           keys: '⌘↵ send · Esc cancel',
           errEmpty: 'Nothing to send',
           errRead: 'Could not read the original attachment: ',
@@ -85,12 +87,14 @@ window.__ModuleLoader__.load({
           imgDrag: 'Drag into the input box to attach',
           tag: 'Image {n}',
           token: '[Image {n}]',
+          tokenName: '[{name}]',
+          tokenDup: '[Image {n} {name}]',
           tokenGone: '[Image ?]',
           errRefGone: 'A referenced image was removed; delete the red reference before sending',
           errTokenGone: 'The text references a removed image ([Image ?]); fix it before sending',
           mentionHint: '@ reference an image',
           origin: 'Original',
-          originTitle: 'Open the conversation before this edit (restores it from the archive)'
+          originTitle: 'Open the conversation before this edit'
         }
     }
     // 跟随 DSH 自己的界面语言：桌面版以 --lang=en-US 启动，navigator.language 不可信
@@ -164,7 +168,7 @@ window.__ModuleLoader__.load({
 .der-atpop button{display:flex;align-items:center;gap:8px;height:34px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-primary);font-size:13px;text-align:left;cursor:pointer}
 .der-atpop button[data-active="true"],.der-atpop button:hover{background:var(--dsw-alias-interactive-bg-hover)}
 .der-atpop img{width:24px;height:24px;border-radius:5px;object-fit:cover;flex:none}
-.der-atpop small{margin-left:auto;padding-left:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:12px}
+.der-atpop-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .der-origin{display:inline-flex;align-items:center;gap:3px;width:auto!important;padding:0 6px!important;font-size:12px;white-space:nowrap}
 `
 
@@ -380,22 +384,16 @@ window.__ModuleLoader__.load({
         throw new Error(T.errCut)
       }
       rememberOrigin(targetId, sessionId, cut.kind === 'fork' ? cut.atSeq : -1)
+      // 原会话保持原样（不归档），编辑后的版本是侧栏里另一个新会话
       const sent = await fillAndSubmit(ctx, targetId, text, files)
-      if (!sent) {
-        // 没发出去就不动原会话：内容已在新会话输入框里，按官方提示处理后手动发送即可
-        log.warn('submission not admitted; original session kept')
-        return targetId
-      }
-      try {
-        await ctx.workspaces.archiveSession(sessionId, { stopActivity: true })
-      } catch (e) {
-        log.warn('archive original failed', e)
-      }
+      // 没发出去时内容留在新会话输入框里，按官方提示处理后手动发送即可
+      if (!sent) log.warn('submission not admitted; content left in the new session input')
       return targetId
     }
 
     // ---------- 编辑后的新会话 → 原对话 ----------
-    // 编辑重发不会删历史：原会话整体归档。在编辑后发出的那条消息上留一个「原对话」入口。
+    // 原会话原样保留；在编辑后发出的那条消息上留一个「原对话」入口，方便来回切换。
+    // 以前的版本会把原会话归档，所以打开时仍兼容「已归档」的情况。
     // 记录只放在本机（localStorage），fork 与「第一条开新会话」两种情况都适用。
     const ORIGINS_KEY = PLUGIN + ':origins'
     let originsCache = null
@@ -939,8 +937,9 @@ window.__ModuleLoader__.load({
     }
 
     // ---------- @ 引用图片 ----------
-    // 在官方 @ 菜单里加一组「图片」：选中后插入引用 chip（显示为 @图N），发送时按当时的附件顺序写成【图N】。
-    // 调整顺序或删图后草稿里的 chip 跟着重编号，引用的图被删掉就标红，发送时拦下。
+    // 在官方 @ 菜单里加一组「图片」：选中后插入引用 chip（显示为 @文件名），发送时写成【文件名】。
+    // 模型收到的每张图都带着文件名，所以按名字就能对上；同名的图才带上序号写成【图N 文件名】。
+    // 引用的图被删掉就标红，发送时拦下。
     const MENTION_SOURCE = 'der-image'
     const fmt = (s, n) => s.replace('{n}', n)
 
@@ -951,25 +950,43 @@ window.__ModuleLoader__.load({
       const out = []
       for (const id of ids) {
         const draft = conversation.draftAttachments && conversation.draftAttachments.get(id)
-        if (draft && draft.kind === 'image') out.push({ id, n: out.length + 1, name: (draft.file && draft.file.name) || '', url: draft.previewUrl || '' })
+        if (!draft || draft.kind !== 'image') continue
+        const n = out.length + 1
+        out.push({ id, n, name: (draft.file && draft.file.name) || fmt(T.tag, n), url: draft.previewUrl || '' })
       }
       return out
+    }
+
+    // 发给模型的写法：文件名唯一时只写名字，有同名图时带上序号区分
+    function imageToken(im, images) {
+      const dup = images.some((other) => other !== im && other.name === im.name)
+      return (dup ? T.tokenDup : T.tokenName).replace('{n}', im.n).replace('{name}', im.name)
+    }
+
+    // chip 上显示的名字：太长时保留开头和扩展名
+    function shortName(name) {
+      return name.length > 28 ? name.slice(0, 15) + '…' + name.slice(-12) : name
     }
 
     function mentionRef(sessionId, id) {
       return MENTION_SOURCE + ':' + sessionId + ':' + id
     }
 
-    // 引用当前对应第几张图；图已不在输入框里时返回 0
-    function mentionNumber(ctx, ref) {
+    // 引用对应的图片及当前全部待发图片；图已不在输入框里时返回 null
+    function mentionImage(ctx, ref) {
       const m = /^der-image:([^:]+):(.+)$/.exec(ref || '')
-      if (!m) return 0
+      if (!m) return null
       try {
-        const hit = draftImages(ctx, m[1]).find((im) => im.id === m[2])
-        return hit ? hit.n : 0
+        const images = draftImages(ctx, m[1])
+        const im = images.find((it) => it.id === m[2])
+        return im ? { im, images } : null
       } catch (e) {
-        return 0
+        return null
       }
+    }
+
+    function mentionInsert(sessionId, im, images) {
+      return { source: MENTION_SOURCE, ref: mentionRef(sessionId, im.id), label: shortName(im.name), clipboardText: imageToken(im, images) }
     }
 
     function thumbIcon(url) {
@@ -978,7 +995,7 @@ window.__ModuleLoader__.load({
       }
     }
 
-    // 附件顺序变了（拖动排序、删图、加图）就重写草稿里的图片 chip：编号、复制文本、是否标红
+    // 附件变了（拖动排序、删图、加图）就重写草稿里的图片 chip：名字、发送写法（同名序号）、是否标红
     function relabelDraft(ctx, shell) {
       const doc = shell.draftSnapshot
       if (!doc || typeof doc.text !== 'string' || !Array.isArray(doc.references)) return
@@ -995,12 +1012,13 @@ window.__ModuleLoader__.load({
           text += doc.text.slice(r.offset, r.offset + r.length)
           continue
         }
-        const n = mentionNumber(ctx, r.ref)
-        const label = fmt(T.tag, n || '?')
-        const clip = n ? fmt(T.token, n) : T.tokenGone
-        if (label !== r.label || clip !== r.clipboardText || !!r.invalid !== !n) changed = true
+        const hit = mentionImage(ctx, r.ref)
+        // 图被删掉：保留原来的名字，只标红
+        const label = hit ? shortName(hit.im.name) : r.label
+        const clip = hit ? imageToken(hit.im, hit.images) : r.clipboardText
+        if (label !== r.label || clip !== r.clipboardText || !!r.invalid !== !hit) changed = true
         const next = { ...r, offset: text.length, length: clip.length, label, clipboardText: clip }
-        if (n) delete next.invalid
+        if (hit) delete next.invalid
         else next.invalid = true
         refs.push(next)
         text += clip
@@ -1077,9 +1095,15 @@ window.__ModuleLoader__.load({
 
     // ---------- 紧跟文字的 @ ----------
     // 官方 @ 只认行首或空白后的 @，中文里「奶奶@」不会弹菜单。这种情况由本插件补一个只列图片的小菜单，
-    // 选中后同样插入官方引用 chip（编号、标红、发送时写成【图N】都和官方菜单一致）。
-    // @ 后面只允许空、数字或「图N」，免得打邮箱地址时误弹。
-    const INLINE_QUERY = /^(图|image)?\d*$/i
+    // 选中后同样插入官方引用 chip（显示、标红、发送写法都和官方菜单一致）。
+    // @ 前面是英文字母、数字或邮箱用的符号时不弹，免得打邮箱地址时误弹。
+    const EMAIL_CHAR = /[A-Za-z0-9._%+-]/
+
+    // 按文件名（不分大小写）或序号筛选
+    function matchImage(im, query) {
+      const q = String(query || '').trim().toLowerCase()
+      return !q || im.name.toLowerCase().includes(q) || String(im.n) === q
+    }
 
     function inlineMentionAt(shell) {
       const p = shell.projection
@@ -1088,10 +1112,9 @@ window.__ModuleLoader__.load({
       const text = p.detectText
       const caret = p.caret
       let i = caret - 1
-      while (i >= 0 && caret - i <= 12 && text[i] !== '@' && !/\s/.test(text[i])) i--
-      if (i <= 0 || text[i] !== '@' || /\s/.test(text[i - 1])) return null
-      const query = text.slice(i + 1, caret)
-      return INLINE_QUERY.test(query) ? { start: i, query, prefix: text.slice(0, i + 1) } : null
+      while (i >= 0 && caret - i <= 32 && text[i] !== '@' && !/\s/.test(text[i])) i--
+      if (i <= 0 || text[i] !== '@' || /\s/.test(text[i - 1]) || EMAIL_CHAR.test(text[i - 1])) return null
+      return { start: i, query: text.slice(i + 1, caret), prefix: text.slice(0, i + 1) }
     }
 
     function installInlineMention(ctx) {
@@ -1126,7 +1149,7 @@ window.__ModuleLoader__.load({
         if (!shell || typeof shell.insertReference !== 'function') return
         const caret = shell.actions.captureInsertion()
         const ok = shell.insertReference(
-          { source: MENTION_SOURCE, ref: mentionRef(current.sessionId, im.id), label: fmt(T.tag, im.n), clipboardText: fmt(T.token, im.n) },
+          mentionInsert(current.sessionId, im, current.images),
           { start: current.start, end: caret.end, draftRev: caret.draftRev }
         )
         if (!ok) log.warn('inline @ image insert refused')
@@ -1149,13 +1172,10 @@ window.__ModuleLoader__.load({
             row.appendChild(img)
           }
           const label = document.createElement('span')
-          label.textContent = fmt(T.tag, im.n)
+          label.className = 'der-atpop-name'
+          label.textContent = im.name
+          label.title = im.name
           row.appendChild(label)
-          if (im.name) {
-            const name = document.createElement('small')
-            name.textContent = im.name
-            row.appendChild(name)
-          }
           // mousedown 里选：不让输入框失焦
           row.addEventListener('mousedown', (e) => {
             e.preventDefault()
@@ -1193,12 +1213,12 @@ window.__ModuleLoader__.load({
           return close()
         }
         if (hit.prefix === dismissed) return close()
-        const q = hit.query.replace(/^(图|image)/i, '')
-        const items = draftImages(ctx, sessionId).filter((im) => !q || String(im.n).startsWith(q))
+        const images = draftImages(ctx, sessionId)
+        const items = images.filter((im) => matchImage(im, hit.query))
         if (!items.length) return close()
         trackDraft(ctx, sessionId)
         const active = state && state.start === hit.start ? Math.min(state.active, items.length - 1) : 0
-        state = { sessionId, start: hit.start, prefix: hit.prefix, items, active }
+        state = { sessionId, start: hit.start, prefix: hit.prefix, items, images, active }
         render()
         pop.hidden = false
         place(editor)
@@ -1258,12 +1278,10 @@ window.__ModuleLoader__.load({
         name: MENTION_SOURCE,
         async candidates(session, { query }) {
           trackDraft(ctx, session.sessionId)
-          const q = String(query || '').trim().toLowerCase()
           return draftImages(ctx, session.sessionId)
-            .filter((im) => !q || fmt(T.tag, im.n).toLowerCase().includes(q) || String(im.n) === q || im.name.toLowerCase().includes(q))
+            .filter((im) => matchImage(im, query))
             .map((im) => ({
-              name: fmt(T.tag, im.n),
-              description: im.name,
+              name: im.name,
               icon: thumbIcon(im.url),
               section: T.images,
               value: JSON.stringify({ sessionId: session.sessionId, id: im.id, n: im.n })
@@ -1274,18 +1292,20 @@ window.__ModuleLoader__.load({
           try {
             v = JSON.parse(candidate.value)
           } catch (e) {}
-          if (!v) return undefined
-          return { insert: { source: MENTION_SOURCE, ref: mentionRef(v.sessionId, v.id), label: fmt(T.tag, v.n), clipboardText: fmt(T.token, v.n) } }
+          // 以选中这一刻的附件为准（菜单打开后可能又加了同名图）
+          const images = v ? draftImages(ctx, v.sessionId) : []
+          const im = images.find((it) => it.id === v.id)
+          return im ? { insert: mentionInsert(v.sessionId, im, images) } : undefined
         },
         codec: {
           clipboardText: (ref) => {
-            const n = mentionNumber(ctx, ref)
-            return n ? fmt(T.token, n) : T.tokenGone
+            const hit = mentionImage(ctx, ref)
+            return hit ? imageToken(hit.im, hit.images) : T.tokenGone
           },
-          // 提交时同步读一次附件顺序：输入框此刻还没清空
+          // 提交时同步读一次附件：输入框此刻还没清空
           serialize: (ref) => {
-            const n = mentionNumber(ctx, ref)
-            return n ? Promise.resolve(fmt(T.token, n)) : Promise.reject(new Error(T.errRefGone))
+            const hit = mentionImage(ctx, ref)
+            return hit ? Promise.resolve(imageToken(hit.im, hit.images)) : Promise.reject(new Error(T.errRefGone))
           }
         }
       }
@@ -1501,19 +1521,13 @@ window.__ModuleLoader__.load({
       }
 
       const imageItems = items.filter((it) => it.kind === 'image')
-      const mentionList = mention
-        ? imageItems
-            .map((item, i) => ({ item, n: i + 1 }))
-            .filter(({ item, n }) => {
-              const q = mention.query.toLowerCase()
-              return !q || String(n).startsWith(q) || fmt(T.tag, n).toLowerCase().includes(q) || item.name.toLowerCase().includes(q)
-            })
-        : []
-      const pickMention = (n) => {
+      const imageEntries = imageItems.map((item, i) => ({ item, n: i + 1, name: item.name }))
+      const mentionList = mention ? imageEntries.filter((entry) => matchImage(entry, mention.query)) : []
+      const pickMention = (entry) => {
         const el = areaRef.current
         if (!mention || !el) return
         const end = Math.max(el.selectionStart, mention.start + 1)
-        const token = fmt(T.token, n)
+        const token = imageToken(entry, imageEntries)
         const caret = mention.start + token.length
         setText(text.slice(0, mention.start) + token + text.slice(end))
         setMention(null)
@@ -1523,7 +1537,8 @@ window.__ModuleLoader__.load({
         })
       }
       const trackMention = (value, caret) => {
-        if (imageItems.length && caret > 0 && value[caret - 1] === '@' && value.length > text.length) {
+        const before = caret > 1 ? value[caret - 2] : ''
+        if (imageItems.length && caret > 0 && value[caret - 1] === '@' && value.length > text.length && !EMAIL_CHAR.test(before)) {
           setMention({ start: caret - 1, query: '', active: 0 })
           return
         }
@@ -1647,7 +1662,7 @@ window.__ModuleLoader__.load({
               }
               if ((e.key === 'Enter' && !e.metaKey && !e.ctrlKey) || e.key === 'Tab') {
                 e.preventDefault()
-                pickMention(mentionList[Math.min(mention.active, mentionList.length - 1)].n)
+                pickMention(mentionList[Math.min(mention.active, mentionList.length - 1)])
                 return
               }
               if (e.key === 'Escape') {
@@ -1669,23 +1684,24 @@ window.__ModuleLoader__.load({
           ? h(
               'div',
               { className: 'der-mention', role: 'listbox' },
-              ...mentionList.map(({ item, n }, i) =>
+              ...mentionList.map((entry, i) =>
                 h(
                   'button',
                   {
-                    key: item.key,
+                    key: entry.item.key,
                     type: 'button',
                     role: 'option',
+                    title: entry.name,
                     'aria-selected': i === mention.active,
                     'data-active': i === mention.active ? 'true' : undefined,
                     // mousedown 里选：click 之前文字框已失焦，菜单会先被关掉
                     onMouseDown: (e) => {
                       e.preventDefault()
-                      pickMention(n)
+                      pickMention(entry)
                     }
                   },
-                  h(MentionThumb, { item, loadImage }),
-                  fmt(T.tag, n)
+                  h(MentionThumb, { item: entry.item, loadImage }),
+                  shortName(entry.name)
                 )
               )
             )

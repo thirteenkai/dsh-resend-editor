@@ -12,19 +12,19 @@
 - 删图片：缩略图右上角 ×
 - 调整顺序：拖动缩略图，左下角序号就是发送顺序
 - 补图片或文件：点 `+`、往卡片里拖，或在文字框里粘贴
-- 在文字里键入 `@` 选图，插入【图N】；调整顺序或删图后编号自动跟着改，删掉的图变成【图?】并在发送前拦下
+- 在文字里键入 `@` 选图，插入【文件名】（同名图写成【图N 文件名】）
 - `⌘↵` 发送，`Esc` 取消
 - 发送前按会话的图片限制校验（张数、单张大小、总大小、格式），超限直接提示
 - 界面语言跟随 DSH 设置（中文 / English）
 
 ## @ 引用图片
 
-提示词里不用再写「图一是情景，2 是豆包奶奶……」：在官方输入框里键入 `@`，菜单最上面是待发送的图片（带缩略图），选中后插入一个 `@图2` 标签。
+提示词里不用再写「图一是情景，2 是豆包奶奶……」：在官方输入框里键入 `@`，菜单最上面是待发送的图片（缩略图 + 文件名），选中后插入一个 `@豆包奶奶.png` 标签。
 
-- 输入框里的图片左下角有序号，和标签对应；`@2`、`@图2` 或文件名都能筛选。
-- 拖动调整附件顺序后，标签编号跟着变；引用的图被删掉，标签标红，发送时拦下。
-- 发给模型的文字里，标签写成【图2】，和图片的发送顺序一致。
-- 中文里 `@` 紧跟在文字后面（如 `奶奶@`）也能用：官方菜单只认行首或空格后的 `@`，这种情况由插件弹一个只列图片的小菜单，`↑↓` 选择、回车或 Tab 插入、Esc 关闭。为免打邮箱时误弹，`@` 后面只认空、数字或「图N」。
+- 输入文件名的一部分即可筛选，如 `@豆包`。
+- 发给模型的文字里，标签写成【豆包奶奶.png】。模型收到的每张图都带着文件名，所以能对上；有同名图（如几张截图都叫 image.png）时自动带上序号，写成【图3 image.png】，序号即输入框里图片左下角的数字。
+- 引用的图被删掉，标签标红，发送时拦下。
+- 中文里 `@` 紧跟在文字后面（如 `奶奶@`）也能用：官方菜单只认行首或空格后的 `@`，这种情况由插件弹一个只列图片的小菜单，`↑↓` 选择、回车或 Tab 插入、Esc 关闭。`@` 前面是英文字母或数字时（如邮箱 `kay@`）不弹。
 
 ## 图片复制、下载、拖进输入框
 
@@ -51,10 +51,10 @@
 
 | 编辑的是 | 做法 |
 | --- | --- |
-| 第二条及以后 | 从上一轮结束处 fork 出新会话（保留之前的对话），把改后的内容发出去 |
-| 第一条 | 前面没有可切的轮次，在同一工作区开新会话发出去 |
+| 第二条及以后 | 从上一轮结束处 fork 出一个新聊天（带着之前的对话），把改后的内容发出去 |
+| 第一条 | 前面没有可切的轮次，在同一工作区开一个新聊天发出去 |
 
-历史不会丢：原会话（含被编辑的那条和之后的所有消息）整体归档。新会话里编辑后发出的那条消息下方有「↩ 原对话」，点一下会把原会话从归档恢复并打开；也可以在侧栏归档里找回。只回退对话，不改动工作区文件。
+原聊天原样保留，侧栏里会多一个新聊天。例如聊了 10 条后编辑第 2 条：新聊天里是第 1 条 + 改过的第 2 条，原聊天的 10 条一条不少。新聊天里编辑后发出的那条消息下方有「↩ 原对话」，点一下跳回原聊天。只分叉对话，不改动工作区文件。
 
 ## 安装
 
@@ -77,7 +77,7 @@
 
 - 只处理普通用户消息；Agent 运行中插话发送的消息不显示编辑按钮。
 - 编辑第一条时开出的新会话使用默认模型，不继承原会话里切换过的模型。
-- 「↩ 原对话」的对应关系只记在本机，换电脑或清除应用数据后不再显示（原会话仍在归档里）。
+- 「↩ 原对话」的对应关系只记在本机，换电脑或清除应用数据后不再显示（原聊天仍在侧栏里）。
 - 依赖 DSH 尚未公开稳定的客户端接口，DSH 升级后可能需要更新插件。已验证版本：0.2.1-rc.3。
 
 ## 开发
@@ -102,8 +102,8 @@ A DeepSeek Harness plugin that lets you edit a message you already sent — chan
 
 - Later messages: forks a new session after the previous turn and sends the edited message there.
 - First message: opens a new session in the same workspace and sends it there.
-- The original session is archived, not deleted. The resent message shows "↩ Original", which restores and opens it. Workspace files are not touched.
-- Type `@` in the input box to reference a pending image: it inserts an `@Image 2` tag that is sent as `[Image 2]`, renumbers when you reorder, and turns red (blocking the send) if that image is removed. An `@` typed right after text (e.g. Chinese without a space) opens a plugin menu that lists only images.
+- The original session stays untouched; the edit becomes a new chat next to it. The resent message shows "↩ Original" to jump back. Workspace files are not touched.
+- Type `@` in the input box to reference a pending image by file name: it inserts an `@photo.png` tag that is sent as `[photo.png]` (`[Image 3 image.png]` when names repeat), and turns red (blocking the send) if that image is removed. An `@` typed right after non-ASCII text (e.g. Chinese without a space) opens a plugin menu that lists only images.
 - Images in the conversation (yours, ones DeepSeek generates in replies, tool results) get Copy / Download on hover and in the full-size preview, and can be dragged into the input box as attachments.
 - Pending attachments in the official input box can be dragged to reorder; they are sent in the new order.
 - Copying a message with images copies the whole message: pasting into a DSH composer or the edit card restores the images as attachments in order; rich-text editors receive text and inline images.
