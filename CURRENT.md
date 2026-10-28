@@ -7,7 +7,7 @@
 - 包名 `dsh-resend-editor`（`dsh-edit-resend` 在 npm 已被他人占用，2026-10-28 改名；本地目录名未改）。
 - v0.1.1：编辑任意用户消息（含第一条），改文字、删图、拖动排序、补图，发送前按 imageLimits 校验；原会话归档；界面语言跟随 DSH 设置。
 - 已在隔离测试环境（DSH 0.2.1-rc.3 web profile + 假模型）验证：普通消息 fork 重发、第一条开新会话、10 图长文本、超 20 张拦截、拖入文件不泄漏到官方输入框、中英文切换、从打包文件全新安装。
-- 本机 desktop profile 以 link 方式安装；`cordis.patch.yml` 末尾 `id: recall disabled: true` 停用 dsh-recall-plugin（未卸载，改前有 `.bak-*` 备份）。
+- 本机 desktop profile 现装 npm 版 `dsh-resend-editor@0.2.0`（2026-10-28 11:48 曾被 GUI 换成 npm `^0.1.1`，替掉了原来的 link，导致复制不带图；已用 CLI `plugin add dsh-resend-editor@0.2.0` 升级）。改本地代码后要实测，需重新 `add link:<本目录>`。DSH 的 pnpm 有最小发布时长限制，CLI 指定版本时会自动写入 `minimumReleaseAgeExclude`；`cordis.patch.yml` 末尾 `id: recall disabled: true` 停用 dsh-recall-plugin（未卸载，改前有 `.bak-*` 备份）。
 
 - v0.2.0（2026-10-28 已发布 npm，GitHub 已推送）：复制带图片消息时连图片一起复制。剪贴板写 text/plain + text/html（图片内嵌 data URI，带 `data-der-copy` 标记）；插件内存记下原始文件，粘贴到官方输入框（`[data-composer-card]`）或编辑卡时按原顺序补成附件。已在测试环境用替身剪贴板验证（内置浏览器禁用剪贴板）；桌面版用户实测粘贴正常。
 - v0.2.0 同版本还加了官方输入框附件拖动排序：MutationObserver 给 `[data-composer-card] [data-slot="conversation.input.attachments"] [role="group"]` 的子项加 draggable，drop 时对主会话 shell 做「全部 removeAttachment（不释放）→ 按新顺序 addAttachments」。条目数与 attachmentIds 不一致时不动（避免误改其他输入框）。测试环境已验证拖动、点击预览、发送顺序。
