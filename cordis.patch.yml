@@ -1,0 +1,4 @@
+# 安装后由 DSH 的 bundle 协调把本插件挂进 profile。
+- insert:
+    - id: resend-editor
+      name: 'dsh-resend-editor'

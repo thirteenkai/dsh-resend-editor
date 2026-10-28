@@ -1,0 +1,20 @@
+# 隔离测试环境的 profile 覆盖层：接本地假模型，不需要 DeepSeek 账号。
+- id: llm-pi-ai
+  name: "@deepseek-ai/dsh-llm-pi-ai"
+  config:
+    providers:
+      mock:
+        displayName: Mock
+        apiKeyEnv: DSH_MOCK_KEY
+        api: openai-completions
+        baseURL: http://127.0.0.1:43125/v1
+        models:
+          - id: mock-1
+            name: Mock 1
+            contextWindow: 128000
+            maxTokens: 4096
+            input: [text, image]
+- id: agent-default-model
+  config:
+    provider: mock
+    model: mock-1

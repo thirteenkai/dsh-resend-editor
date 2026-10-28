@@ -1,0 +1,46 @@
+{
+  "name": "dsh-resend-editor",
+  "version": "0.1.1",
+  "description": "DeepSeek Harness 插件：编辑已发出的消息后重发——改文字、删图片、拖动调整图片顺序、补图，第一条消息也能编辑。Edit a sent message (text, images, order) and resend it.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "edit",
+    "resend",
+    "message"
+  ],
+  "author": "thirteenkai",
+  "license": "MIT",
+  "homepage": "https://github.com/thirteenkai/dsh-resend-editor#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/thirteenkai/dsh-resend-editor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thirteenkai/dsh-resend-editor/issues"
+  },
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}
