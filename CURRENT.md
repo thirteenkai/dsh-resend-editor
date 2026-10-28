@@ -9,6 +9,8 @@
 - 已在隔离测试环境（DSH 0.2.1-rc.3 web profile + 假模型）验证：普通消息 fork 重发、第一条开新会话、10 图长文本、超 20 张拦截、拖入文件不泄漏到官方输入框、中英文切换、从打包文件全新安装。
 - 本机 desktop profile 以 link 方式安装；`cordis.patch.yml` 末尾 `id: recall disabled: true` 停用 dsh-recall-plugin（未卸载，改前有 `.bak-*` 备份）。
 
+- v0.2.0（本地，未发布）：复制带图片消息时连图片一起复制。剪贴板写 text/plain + text/html（图片内嵌 data URI，带 `data-der-copy` 标记）；插件内存记下原始文件，粘贴到官方输入框（`[data-composer-card]`）或编辑卡时按原顺序补成附件。已在测试环境用替身剪贴板验证（内置浏览器禁用剪贴板）；真实剪贴板待桌面版实测。
+
 ## 发布
 
 - GitHub 公开仓库 https://github.com/thirteenkai/dsh-resend-editor （2026-10-28 创建；提交作者用 noreply 邮箱，本仓库 git config 已设）。本环境 SSH 密钥不可用，推送用 `git -c credential.helper= -c "credential.helper=!gh auth git-credential" push`。

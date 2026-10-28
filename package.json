@@ -1,6 +1,6 @@
 {
   "name": "dsh-resend-editor",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "DeepSeek Harness 插件：编辑已发出的消息后重发——改文字、删图片、拖动调整图片顺序、补图，第一条消息也能编辑。Edit a sent message (text, images, order) and resend it.",
   "keywords": [
     "dsh",

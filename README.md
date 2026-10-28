@@ -16,6 +16,15 @@
 - 发送前按会话的图片限制校验（张数、单张大小、总大小、格式），超限直接提示
 - 界面语言跟随 DSH 设置（中文 / English）
 
+## 复制带图片
+
+点带图片消息下方的官方复制按钮，复制的是整条消息，不只是文字：
+
+- 粘贴到 DSH 输入框或编辑卡：文字照常粘贴，图片（和文件）按原顺序自动加回附件——适合把一条消息挪到另一个会话再发。
+- 粘贴到飞书、备忘录等富文本编辑器：贴出图文（剪贴板里是内嵌图片的 HTML）。
+- 纯文本的地方只得到文字；剪贴板一次只能放一张图片数据，多图消息无法以「图片」格式整体粘到只收图片的地方。
+- 没有附件的消息仍走官方复制，行为不变。
+
 ## 发送后会发生什么
 
 | 编辑的是 | 做法 |
@@ -71,6 +80,7 @@ A DeepSeek Harness plugin that lets you edit a message you already sent — chan
 - Later messages: forks a new session after the previous turn and sends the edited message there.
 - First message: opens a new session in the same workspace and sends it there.
 - The original session is archived (recoverable). Workspace files are not touched.
+- Copying a message with images copies the whole message: pasting into a DSH composer or the edit card restores the images as attachments in order; rich-text editors receive text and inline images.
 
 Install:
 

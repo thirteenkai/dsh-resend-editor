@@ -333,6 +333,92 @@ window.__ModuleLoader__.load({
       return targetId
     }
 
+    // ---------- 复制带图片 ----------
+    // 剪贴板一次只能放一张图片数据，所以分两层：
+    //   - text/plain + text/html（图片内嵌为 data URI）→ 飞书、备忘录等富文本编辑器能贴出图文；
+    //   - 内存里记下这次复制的原始文件 → 粘贴到 DSH 输入框或编辑卡时按原顺序还原成附件。
+    const COPY_ATTR = 'data-der-copy'
+    let lastCopy = null
+
+    function escapeHtml(s) {
+      return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+    }
+
+    function fileToDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = () => reject(reader.error)
+        reader.readAsDataURL(file)
+      })
+    }
+
+    // 只处理带附件的消息；纯文字消息交给官方复制
+    async function copyWithAttachments(ctx, sessionId, node) {
+      const { text, items } = splitContent(node && node.data && node.data.content)
+      if (!items.length) return false
+      const files = []
+      for (const item of items) files.push(await itemToFile(ctx, sessionId, item))
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+      const parts = []
+      for (const file of files) {
+        if (/^image\//.test(file.type)) parts.push('<p><img src="' + (await fileToDataUrl(file)) + '" alt="' + escapeHtml(file.name) + '"></p>')
+        else parts.push('<p>[' + escapeHtml(file.name) + ']</p>')
+      }
+      if (text) parts.push('<p>' + escapeHtml(text).replace(/\n/g, '<br>') + '</p>')
+      const html = '<div ' + COPY_ATTR + '="' + id + '">' + parts.join('') + '</div>'
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': new Blob([html], { type: 'text/html' })
+        })
+      ])
+      lastCopy = { id, text, files }
+      return true
+    }
+
+    // 剪贴板里是不是本插件刚复制的那条消息；是就返回它的原始附件
+    function copiedFilesFor(clipboardData) {
+      if (!lastCopy || !clipboardData) return null
+      if (clipboardData.files && clipboardData.files.length) return null
+      const html = clipboardData.getData('text/html') || ''
+      const plain = clipboardData.getData('text/plain') || ''
+      const same = html.includes(COPY_ATTR + '="' + lastCopy.id + '"') || (lastCopy.text !== '' && plain === lastCopy.text)
+      return same ? lastCopy.files : null
+    }
+
+    function addDraftFiles(ctx, sessionId, files) {
+      try {
+        const conversation = ctx.get('conversation')
+        const shell = conversation && conversation.input && conversation.input.shell(sessionId)
+        if (!shell || !shell.actions) return
+        const drafts = conversation.createDrafts(sessionId, files)
+        if (shell.actions.addAttachments(drafts.map((d) => d.id)) === false && conversation.releaseDraftAttachments) {
+          conversation.releaseDraftAttachments(drafts)
+        }
+      } catch (e) {
+        log.warn('restore pasted attachments failed', e)
+      }
+    }
+
+    // 官方输入框：文字照常由官方粘贴，图片在下一轮事件循环按原顺序补成附件
+    // apply 可能被调用多次、插件也可能热重载：全局只保留一个监听，否则图片会被重复添加
+    function installPasteRestore(ctx) {
+      const handler = (e) => {
+        const target = e.target
+        if (!target || !target.closest || target.closest('.der-card') || !target.closest('[data-composer-card]')) return
+        const files = copiedFilesFor(e.clipboardData)
+        const ref = ctx.uiWorkspace.mainReference
+        if (!files || !files.length || !ref || !ref.sessionId) return
+        const sessionId = ref.sessionId
+        setTimeout(() => addDraftFiles(ctx, sessionId, files), 0)
+      }
+      const key = '__' + PLUGIN + ':paste'
+      if (window[key]) document.removeEventListener('paste', window[key], true)
+      window[key] = handler
+      document.addEventListener('paste', handler, true)
+    }
+
     // ---------- 编辑卡 ----------
 
     function useImagePreview(item, loadImage) {
@@ -566,12 +652,16 @@ window.__ModuleLoader__.load({
           disabled: busy,
           onChange: (e) => setText(e.target.value),
           onPaste: (e) => {
+            e.stopPropagation()
             const files = e.clipboardData && e.clipboardData.files
             if (files && files.length) {
               e.preventDefault()
-              e.stopPropagation()
               addFiles(files)
+              return
             }
+            // 从本插件复制的整条消息：文字照常粘贴，图片按原顺序补进来
+            const copied = copiedFilesFor(e.clipboardData)
+            if (copied && copied.length) addFiles(copied)
           },
           onKeyDown: (e) => {
             if (e.key === 'Escape') {
@@ -623,14 +713,16 @@ window.__ModuleLoader__.load({
     const PENCIL =
       '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.6 2.9a1.6 1.6 0 0 1 2.3 0l.2.2a1.6 1.6 0 0 1 0 2.3l-7.4 7.4-3.1.8.8-3.1 7.2-7.6Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/><path d="m9.4 4.2 2.4 2.4" stroke="currentColor" stroke-width="1.1"/></svg>'
 
-    // 把编辑按钮放进官方消息的操作行（时间 + 复制 那一行），沿用复制按钮的样式类
-    function ensureEditButton(root, onEdit) {
+    // 把编辑按钮放进官方消息的操作行（时间 + 复制 那一行），沿用复制按钮的样式类；
+    // 同时给官方复制按钮挂上「带图片复制」：官方先写入纯文本，稍后用图文版本覆盖
+    function ensureActions(root, onEdit, onCopy) {
       if (!root) return
       const actions = root.querySelector('[data-clock="start"]') || root.querySelector('[class*="_actions"]')
       if (!actions) return
+      const copy = actions.querySelector('button:not([data-der-edit])')
+      if (copy) copy.onclick = () => setTimeout(onCopy, 30)
       let btn = actions.querySelector('button[data-der-edit]')
       if (!btn) {
-        const copy = actions.querySelector('button')
         btn = document.createElement('button')
         btn.type = 'button'
         btn.setAttribute('data-der-edit', 'true')
@@ -691,12 +783,19 @@ window.__ModuleLoader__.load({
           } catch (e) {}
           return { component: best.component, t }
         }, [])
+        const propsRef = React.useRef(props)
+        propsRef.current = props
+        const onEdit = React.useCallback(() => setEditing(true), [])
+        const onCopy = React.useCallback(() => {
+          const p = propsRef.current
+          copyWithAttachments(ctx, p.sessionId, p.node).catch((e) => log.warn('copy with attachments failed', e))
+        }, [])
         React.useLayoutEffect(() => {
-          if (!editing) ensureEditButton(rootRef.current, () => setEditing(true))
+          if (!editing) ensureActions(rootRef.current, onEdit, onCopy)
         })
         React.useEffect(() => {
           if (editing || !rootRef.current || typeof MutationObserver === 'undefined') return
-          const obs = new MutationObserver(() => ensureEditButton(rootRef.current, () => setEditing(true)))
+          const obs = new MutationObserver(() => ensureActions(rootRef.current, onEdit, onCopy))
           obs.observe(rootRef.current, { childList: true, subtree: true })
           return () => obs.disconnect()
         }, [editing])
@@ -738,6 +837,7 @@ window.__ModuleLoader__.load({
       apply(ctx) {
         syncLocale(ctx)
         injectCss()
+        installPasteRestore(ctx)
         const Node = makeNode(ctx, 'user')
         try {
           ctx.slots.inject(NODE_SLOT, () =>
