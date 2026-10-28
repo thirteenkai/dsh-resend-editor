@@ -12,7 +12,7 @@
 - v0.2.0（2026-10-28 已发布 npm，GitHub 已推送）：复制带图片消息时连图片一起复制。剪贴板写 text/plain + text/html（图片内嵌 data URI，带 `data-der-copy` 标记）；插件内存记下原始文件，粘贴到官方输入框（`[data-composer-card]`）或编辑卡时按原顺序补成附件。已在测试环境用替身剪贴板验证（内置浏览器禁用剪贴板）；桌面版用户实测粘贴正常。
 - v0.2.0 同版本还加了官方输入框附件拖动排序：MutationObserver 给 `[data-composer-card] [data-slot="conversation.input.attachments"] [role="group"]` 的子项加 draggable，drop 时对主会话 shell 做「全部 removeAttachment（不释放）→ 按新顺序 addAttachments」。条目数与 attachmentIds 不一致时不动（避免误改其他输入框）。测试环境已验证拖动、点击预览、发送顺序。
 
-- v0.3.0（2026-10-28 本地完成，未推送、未发布）：
+- v0.3.0（2026-10-28 已发布 npm，latest；GitHub main 为 f7d845c；桌面版实测通过）：
   - 对话图片复制／下载／拖进输入框：DOM 层识别 `[data-conversation-content]` 里「按钮只包一张 img、≥40px」的图片（官方画廊 + 回复里的 Markdown 图片），悬停浮出工具栏；灯箱（`[role=dialog][aria-modal]` 且只有一张 img）右上角补按钮。复制用 `ClipboardItem({'image/png': Promise})`，非 PNG 先经 canvas 转 PNG；下载用 `<a download>`（桌面主窗口 session 没有 will-download 拦截，应弹保存框——待桌面实测）。拖动用自定义类型 `application/x-der-image`，只在官方输入框卡片或编辑卡上接收。
   - @ 引用图片：向 `ctx.get('inputTriggers').registerSource` 注册 `@der-image`，并挪到 `@reference` 前面；候选来自 `conversation.draftAttachments.get(id)`（只数图片）。chip 的 ref 为 `der-image:<sessionId>:<attachmentId>`，label 是文件名（用户要求不显示图N），提交时 `codec.serialize` 同步读附件写成【文件名】，有同名图时写【图N 文件名】（模型收到的每张图都带 `Image "文件名"` 说明，靠名字对应）；图不在了就 reject（官方显示错误并保留草稿）。订阅 `shell.state`，附件变化时用 `shell.actions.setDraft({text, references})` 重写 chip 的 label／clipboardText／invalid。官方 @ 只在行首或空白后触发。
   - 紧跟文字的 `@`：官方 `activeAtToken` 只认 `(?:^|\s)@`（标点后也不行），中文「奶奶@」不弹菜单。插件读 `shell.projection`（detectText/caret）自行识别，弹只列图片的浮层，选中后 `shell.insertReference(insert, {start, end, draftRev})` 插官方 chip（span 取自 `actions.captureInsertion()`）。@ 前是 ASCII 字母数字或邮箱符号时不弹（防邮箱误弹），@ 后按文件名或序号筛选；按键捕获在 document 上先于编辑器，按键时若检查还没跑先同步跑一次（否则快速回车会直接发送）；Esc 按「@ 及之前文字」记忆，不按位置。
