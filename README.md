@@ -16,6 +16,10 @@
 - 发送前按会话的图片限制校验（张数、单张大小、总大小、格式），超限直接提示
 - 界面语言跟随 DSH 设置（中文 / English）
 
+## 输入框附件拖动排序
+
+官方输入框里待发送的图片和文件也可以直接拖动调整顺序，发送时按新顺序发出。点缩略图仍然是查看原图。
+
 ## 复制带图片
 
 点带图片消息下方的官方复制按钮，复制的是整条消息，不只是文字：
@@ -80,6 +84,7 @@ A DeepSeek Harness plugin that lets you edit a message you already sent — chan
 - Later messages: forks a new session after the previous turn and sends the edited message there.
 - First message: opens a new session in the same workspace and sends it there.
 - The original session is archived (recoverable). Workspace files are not touched.
+- Pending attachments in the official input box can be dragged to reorder; they are sent in the new order.
 - Copying a message with images copies the whole message: pasting into a DSH composer or the edit card restores the images as attachments in order; rich-text editors receive text and inline images.
 
 Install:

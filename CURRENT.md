@@ -9,7 +9,8 @@
 - 已在隔离测试环境（DSH 0.2.1-rc.3 web profile + 假模型）验证：普通消息 fork 重发、第一条开新会话、10 图长文本、超 20 张拦截、拖入文件不泄漏到官方输入框、中英文切换、从打包文件全新安装。
 - 本机 desktop profile 以 link 方式安装；`cordis.patch.yml` 末尾 `id: recall disabled: true` 停用 dsh-recall-plugin（未卸载，改前有 `.bak-*` 备份）。
 
-- v0.2.0（本地，未发布）：复制带图片消息时连图片一起复制。剪贴板写 text/plain + text/html（图片内嵌 data URI，带 `data-der-copy` 标记）；插件内存记下原始文件，粘贴到官方输入框（`[data-composer-card]`）或编辑卡时按原顺序补成附件。已在测试环境用替身剪贴板验证（内置浏览器禁用剪贴板）；真实剪贴板待桌面版实测。
+- v0.2.0（本地，未发布）：复制带图片消息时连图片一起复制。剪贴板写 text/plain + text/html（图片内嵌 data URI，带 `data-der-copy` 标记）；插件内存记下原始文件，粘贴到官方输入框（`[data-composer-card]`）或编辑卡时按原顺序补成附件。已在测试环境用替身剪贴板验证（内置浏览器禁用剪贴板）；桌面版用户实测粘贴正常。
+- v0.2.0 同版本还加了官方输入框附件拖动排序：MutationObserver 给 `[data-composer-card] [data-slot="conversation.input.attachments"] [role="group"]` 的子项加 draggable，drop 时对主会话 shell 做「全部 removeAttachment（不释放）→ 按新顺序 addAttachments」。条目数与 attachmentIds 不一致时不动（避免误改其他输入框）。测试环境已验证拖动、点击预览、发送顺序。
 
 ## 发布
 

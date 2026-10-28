@@ -106,6 +106,9 @@ window.__ModuleLoader__.load({
 .der-btn-primary:hover{filter:brightness(1.08);background:var(--dsw-alias-brand-primary)}
 .der-btn[disabled]{opacity:.5;cursor:default}
 .der-file-input{display:none}
+[data-der-reorder]>[draggable="true"]{cursor:grab}
+[data-der-reorder]>.der-rail-dragging{opacity:.35}
+[data-der-reorder]>.der-rail-over{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px;border-radius:12px}
 `
 
     function injectCss() {
@@ -417,6 +420,109 @@ window.__ModuleLoader__.load({
       if (window[key]) document.removeEventListener('paste', window[key], true)
       window[key] = handler
       document.addEventListener('paste', handler, true)
+    }
+
+    // ---------- 官方输入框附件拖动排序 ----------
+    // 官方附件栏按 shell.attachmentIds 的顺序渲染、发送；shell 没有重排接口，
+    // 用「全部移除（不释放）再按新顺序加回」实现，草稿附件本身不受影响。
+    const RAIL_SELECTOR = '[data-composer-card] [data-slot="conversation.input.attachments"] [role="group"]'
+
+    function reorderComposer(ctx, fromIndex, toIndex, railCount) {
+      const ref = ctx.uiWorkspace.mainReference
+      if (!ref || !ref.sessionId || fromIndex === toIndex) return
+      const shell = ctx.get('conversation').input.shell(ref.sessionId)
+      const ids = shell && shell.snapshot && Array.isArray(shell.snapshot.attachmentIds) ? shell.snapshot.attachmentIds.slice() : []
+      // 条目数对不上说明这条附件栏不属于主会话的输入框（例如侧栏里的另一个输入框），不动
+      if (ids.length !== railCount) return
+      if (fromIndex < 0 || toIndex < 0 || fromIndex >= ids.length || toIndex >= ids.length) return
+      const next = ids.slice()
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      for (const id of ids) shell.actions.removeAttachment(id)
+      if (shell.actions.addAttachments(next) === false) shell.actions.addAttachments(ids)
+    }
+
+    function bindRail(ctx, rail) {
+      if (rail.hasAttribute('data-der-reorder')) return
+      rail.setAttribute('data-der-reorder', 'true')
+      let from = -1
+      const itemOf = (target) => {
+        let el = target
+        while (el && el.parentElement !== rail) el = el.parentElement
+        return el && el.parentElement === rail ? el : null
+      }
+      const indexOf = (el) => Array.prototype.indexOf.call(rail.children, el)
+      const clearOver = () => rail.querySelectorAll('.der-rail-over').forEach((el) => el.classList.remove('der-rail-over'))
+      const end = () => {
+        from = -1
+        clearOver()
+        rail.querySelectorAll('.der-rail-dragging').forEach((el) => el.classList.remove('der-rail-dragging'))
+      }
+      rail.addEventListener('dragstart', (e) => {
+        const item = itemOf(e.target)
+        if (!item) return
+        from = indexOf(item)
+        item.classList.add('der-rail-dragging')
+        e.dataTransfer.effectAllowed = 'move'
+        try {
+          e.dataTransfer.setData('application/x-der-reorder', String(from))
+        } catch (err) {}
+        e.stopPropagation()
+      })
+      // 内部拖动的事件不能冒泡到官方输入框：它会当成「拖入文件」处理
+      rail.addEventListener('dragenter', (e) => {
+        if (from < 0) return
+        e.preventDefault()
+        e.stopPropagation()
+      })
+      rail.addEventListener('dragover', (e) => {
+        if (from < 0) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        const item = itemOf(e.target)
+        clearOver()
+        if (item && indexOf(item) !== from) item.classList.add('der-rail-over')
+      })
+      rail.addEventListener('drop', (e) => {
+        if (from < 0) return
+        e.preventDefault()
+        e.stopPropagation()
+        const item = itemOf(e.target)
+        const to = item ? indexOf(item) : -1
+        const start = from
+        end()
+        if (to >= 0) reorderComposer(ctx, start, to, rail.children.length)
+      })
+      rail.addEventListener('dragend', end)
+    }
+
+    function prepareRails(ctx) {
+      for (const rail of document.querySelectorAll(RAIL_SELECTOR)) {
+        bindRail(ctx, rail)
+        for (const item of rail.children) {
+          if (item.getAttribute('draggable') !== 'true') item.setAttribute('draggable', 'true')
+          // 缩略图里的 img 默认可拖（会拖出图片地址），交给外层条目处理
+          for (const img of item.querySelectorAll('img')) if (img.draggable) img.draggable = false
+        }
+      }
+    }
+
+    function installComposerReorder(ctx) {
+      const key = '__' + PLUGIN + ':reorder'
+      if (window[key]) window[key].disconnect()
+      let queued = false
+      const obs = new MutationObserver(() => {
+        if (queued) return
+        queued = true
+        requestAnimationFrame(() => {
+          queued = false
+          prepareRails(ctx)
+        })
+      })
+      obs.observe(document.body, { childList: true, subtree: true })
+      window[key] = obs
+      prepareRails(ctx)
     }
 
     // ---------- 编辑卡 ----------
@@ -838,6 +944,7 @@ window.__ModuleLoader__.load({
         syncLocale(ctx)
         injectCss()
         installPasteRestore(ctx)
+        installComposerReorder(ctx)
         const Node = makeNode(ctx, 'user')
         try {
           ctx.slots.inject(NODE_SLOT, () =>
